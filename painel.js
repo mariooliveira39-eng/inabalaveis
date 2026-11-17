@@ -88,7 +88,7 @@
   // ---------- confete (pódio e recordes) ----------
   function confete() {
     if (reduzMovimento) return;
-    const cores = ['#a78bfa', '#f472b6', '#fbbf24', '#22d3ee', '#34d399'];
+    const cores = ['#00a3dc', '#38bdf8', '#f08a24', '#f7c948', '#24456f'];
     const box = document.createElement('div');
     box.className = 'confete';
     for (let i = 0; i < 70; i++) {

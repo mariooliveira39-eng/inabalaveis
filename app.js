@@ -416,7 +416,7 @@
     const real = m.porDia.map((d, i) => `${x(i)},${y(d.acumulado)}`).join(' ');
     const ult = m.porDia.length - 1;
     const ultV = m.porDia[ult]?.acumulado || 0;
-    const cor = getComputedStyle(document.documentElement).getPropertyValue('--serie').trim() || '#9085e9';
+    const cor = getComputedStyle(document.documentElement).getPropertyValue('--serie').trim() || '#38a9e0';
     const linha = getComputedStyle(document.documentElement).getPropertyValue('--line').trim();
     const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
     return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Vendas acumuladas comparadas à meta">
@@ -464,7 +464,7 @@
     store.set('tema', tema);
     $('#btnTema').textContent = tema === 'claro' ? '🌙' : '☀️';
     $('#btnTema').setAttribute('aria-label', tema === 'claro' ? 'Usar tema escuro' : 'Usar tema claro');
-    document.querySelector('meta[name=theme-color]')?.setAttribute('content', tema === 'claro' ? '#f6f5ff' : '#070B1A');
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', tema === 'claro' ? '#f4f8fc' : '#06101f');
     if (mapa && camadaMapa) { mapa.removeLayer(camadaMapa); camadaMapa = camadaDoTema().addTo(mapa); }
     if (S) { render(); document.dispatchEvent(new CustomEvent('inab:estado', { detail: S })); }
   }
