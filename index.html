@@ -160,6 +160,26 @@
     <!-- Painel de gestão -->
     <section id="aba-gestao" class="aba">
       <div id="kpisGestao" class="kpis"></div>
+      <div class="cartao" id="cardMensagem" hidden>
+        <div class="cartao-topo"><h2>📣 Mensagem para a equipe</h2><span class="dica">cada um recebe com o próprio nome</span></div>
+        <div class="msg-form">
+          <label>Para quem
+            <select id="msgDestino"><option value="todos">Todos os colportores</option></select>
+          </label>
+          <div class="msg-sugestoes" id="msgSugestoes"></div>
+          <label>Mensagem
+            <textarea id="msgTexto" rows="4" maxlength="900" placeholder="Bom dia, {nome}! Hoje é dia de vitória…"></textarea>
+          </label>
+          <div class="msg-linha">
+            <button type="button" class="btn" id="btnMsgNome">+ {nome}</button>
+            <span class="dica" id="msgConta">0/900</span>
+          </div>
+          <div class="msg-previa" id="msgPrevia" hidden></div>
+          <button type="button" class="btn primario" id="btnMsgEnviar">Enviar</button>
+          <p class="dica">Escreva <b>{nome}</b> onde o nome deve aparecer. Sem {nome}, a mensagem começa com "Olá, Nome!". Vai pelo WhatsApp de cada um.</p>
+          <ul class="msg-historico" id="msgHistorico"></ul>
+        </div>
+      </div>
       <div class="cartao">
         <div class="cartao-topo">
           <h2>Relatos de hoje</h2>

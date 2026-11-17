@@ -264,6 +264,7 @@
   const formatarWa = (t) => esc(t).replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
 
   function renderGestao() {
+    renderMensagem();
     const f = relatos();
     kpis($('#kpisGestao'), [
       ['Vendido hoje (colportor)', brl(S.kpis.valorHoje), `público ${brl(S.kpis.valorHojePublico)} · ${S.kpis.vendasHoje} vendas`],
@@ -595,6 +596,84 @@
   };
   $('#btnReenviar').onclick = () => ultimoEnvio && enviarChat(ultimoEnvio.texto, ultimoEnvio.messageId);
 
+  // ---------- Gestão: mensagem do Diretor para a equipe (com o nome de cada um) ----------
+  const SUGESTOES_MSG = [
+    'Bom dia, {nome}! Hoje é dia de vitória. Deus vai na frente abrindo as portas. Vamos com tudo! 💪',
+    '{nome}, cada porta em que você bate leva esperança para uma família. Conte comigo hoje! 🙏',
+    'Bom dia, {nome}! Sejam firmes e inabaláveis (1 Co 15:58): o seu trabalho não é em vão. 🏔️',
+  ];
+  const personalizarMsg = (t, c) => {
+    const nome = String(c?.nome || '').trim().split(/\s+/)[0] || '';
+    const re = /\{\s*(primeiro\s+)?nome\s*\}/gi;
+    return re.test(t) ? t.replace(re, nome) : `Olá, ${nome}! ${t}`;
+  };
+  const destinoMsg = () => {
+    const d = $('#msgDestino').value;
+    return d === 'todos' ? S.colportores : S.colportores.filter((c) => c.liderId === d);
+  };
+  function atualizarMensagem() {
+    const t = $('#msgTexto').value.trim();
+    const lista = destinoMsg();
+    $('#msgConta').textContent = `${$('#msgTexto').value.length}/900`;
+    $('#btnMsgEnviar').textContent = `Enviar para ${lista.length} colportor${lista.length === 1 ? '' : 'es'}`;
+    $('#btnMsgEnviar').disabled = t.length < 3 || !lista.length;
+    const ex = lista.slice(0, 2);
+    $('#msgPrevia').hidden = !t || !ex.length;
+    $('#msgPrevia').innerHTML = ex.map((c) => `<div class="bolha-previa"><span class="dica">${esc(c.nome)} recebe:</span>${esc(personalizarMsg(t, c))}</div>`).join('');
+  }
+  async function carregarHistoricoMsg() {
+    try {
+      const res = await chamar('/api/mensagens');
+      if (res.status === 404) { mensagemIndisponivel = true; $('#cardMensagem').hidden = true; return; } // servidor ainda sem o recurso
+      if (!res.ok) return;
+      const { historico } = await res.json();
+      const lider = (id) => S?.gestores?.find((g) => g.id === id)?.nome;
+      $('#msgHistorico').innerHTML = historico.slice(0, 5).map((m) => `<li><span class="dica">${new Date(m.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · ${m.destino === 'todos' ? 'todos' : `grupo de ${esc(lider(m.destino) || '?')}`} · ${m.qtd} enviadas</span>${esc(m.texto)}</li>`).join('');
+    } catch { /* sem histórico */ }
+  }
+  let historicoMsgCarregado = false;
+  let mensagemIndisponivel = false;
+  function renderMensagem() {
+    const card = $('#cardMensagem');
+    card.hidden = !eu?.diretor || mensagemIndisponivel;
+    if (card.hidden) return;
+    const sel = $('#msgDestino');
+    const atual = sel.value;
+    const lideres = (S.gestores || []).filter((g) => g.perfil === 'lider');
+    const opcoes = '<option value="todos">Todos os colportores</option>' + lideres.map((g) => `<option value="${esc(g.id)}">Grupo de ${esc(g.nome)}</option>`).join('');
+    if (sel.innerHTML !== opcoes) { sel.innerHTML = opcoes; sel.value = [...sel.options].some((o) => o.value === atual) ? atual : 'todos'; }
+    if (!$('#msgSugestoes').children.length) {
+      $('#msgSugestoes').innerHTML = SUGESTOES_MSG.map((s, i) => `<button type="button" class="chip" data-i="${i}">${esc(s.slice(0, 38))}…</button>`).join('');
+      $('#msgSugestoes').onclick = (e) => { const b = e.target.closest('[data-i]'); if (b) { $('#msgTexto').value = SUGESTOES_MSG[b.dataset.i]; atualizarMensagem(); } };
+    }
+    atualizarMensagem();
+    if (!historicoMsgCarregado) { historicoMsgCarregado = true; carregarHistoricoMsg(); }
+  }
+  $('#msgTexto').oninput = atualizarMensagem;
+  $('#msgDestino').onchange = atualizarMensagem;
+  $('#btnMsgNome').onclick = () => {
+    const ta = $('#msgTexto');
+    const i = ta.selectionStart ?? ta.value.length;
+    ta.value = ta.value.slice(0, i) + '{nome}' + ta.value.slice(ta.selectionEnd ?? i);
+    ta.focus(); ta.selectionStart = ta.selectionEnd = i + 6;
+    atualizarMensagem();
+  };
+  $('#btnMsgEnviar').onclick = async () => {
+    const texto = $('#msgTexto').value.trim();
+    const destino = $('#msgDestino').value;
+    const n = destinoMsg().length;
+    if (!confirm(`Enviar esta mensagem para ${n} colportor(es), cada um com o próprio nome?`)) return;
+    const btn = $('#btnMsgEnviar');
+    btn.disabled = true;
+    try {
+      const r = await post('/api/mensagem', { texto, destino });
+      if (r.erro) throw new Error(r.erro);
+      toast(`📣 Mensagem enviada para ${r.enviados} colportor(es).`);
+      $('#msgTexto').value = '';
+      carregarHistoricoMsg();
+    } catch (e) { toast(e.message); } finally { atualizarMensagem(); }
+  };
+
   // ---------- Gestão ----------
   $('#btnLembrete').onclick = async () => {
     try {
@@ -725,10 +804,17 @@
   let loginId = null;
   let carregando = null;
 
+  /** Quem está usando. Devolve 'ok', 'sem-sessao' (login vencido/inválido) ou 'falha' (rede/servidor). */
   async function carregarEu() {
-    try { const res = await chamar('/api/eu'); eu = res.ok ? await res.json() : null; } catch { eu = null; }
+    let estado = 'ok';
+    try {
+      const res = await chamar('/api/eu');
+      if (res.ok) eu = await res.json();
+      else { estado = res.status === 401 ? 'sem-sessao' : 'falha'; if (estado === 'sem-sessao') eu = null; }
+    } catch { estado = 'falha'; }
     renderDiretor();
     if (eu?.diretor) carregarCadastros();
+    return estado;
   }
 
   function carregarCadastros() {
@@ -1584,23 +1670,37 @@
     setTimeout(() => $('#formEntrar').email.focus(), 50);
   }
   let esperaTimer = null;
-  function mostrarAguardando(texto) {
+  function mostrarAguardando(texto, conferirAprovacao = true) {
     $('#telaLogin').hidden = true;
     $('#aguardandoTexto').textContent = texto;
     $('#telaAguardando').hidden = false;
     clearInterval(esperaTimer);
+    if (!conferirAprovacao) return;
     esperaTimer = setInterval(async () => { // confere se o Diretor já aprovou
       await carregarEu();
       if (eu?.gestor || eu?.colportor) { clearInterval(esperaTimer); $('#telaAguardando').hidden = true; await depoisDoLogin(); toast('✅ Cadastro aprovado! Bem-vindo(a) à equipe.'); }
     }, 20000);
   }
+  // Falha de rede/servidor NÃO derruba o login: tenta de novo sozinho, sem pedir outro código.
+  let tentativasEu = 0;
   async function depoisDoLogin() {
     $('#telaLogin').hidden = true;
-    await carregarEu();
+    const estado = await carregarEu();
+    if (estado === 'falha') {
+      tentativasEu += 1;
+      const espera = Math.min(30, 2 ** tentativasEu); // 2, 4, 8, 16, 30 s…
+      mostrarAguardando(`Sem conexão com o servidor agora. Tentando de novo em ${espera} s… (você continua conectado)`, false);
+      clearTimeout(depoisDoLogin.t);
+      depoisDoLogin.t = setTimeout(depoisDoLogin, espera * 1000);
+      return;
+    }
+    tentativasEu = 0;
+    if (estado === 'sem-sessao') { await sb.auth.signOut().catch(() => {}); mostrarLogin(); return; }
     if (!eu) { mostrarLogin(); return; }
     if (eu.gestor || eu.colportor) {
       document.body.classList.remove('sem-acesso');
       $('#telaAguardando').hidden = true;
+      clearInterval(esperaTimer);
       if (eu.colportor) colportorId = eu.colportor.id;
       conectarNuvem();
       if (S) render();
@@ -1685,12 +1785,29 @@
     } finally { btn.disabled = false; }
   };
 
+  // Abre direto se houver login salvo. Erro de rede ao renovar o login NÃO pede código de novo: tenta outra vez.
+  let tentativasSessao = 0;
+  async function conferirSessao() {
+    const { data, error } = await sb.auth.getSession();
+    const temSalvo = Object.keys(localStorage).some((k) => /^sb-.*-auth-token$/.test(k));
+    if (!data.session && error && temSalvo && tentativasSessao < 8) {
+      tentativasSessao += 1;
+      const espera = Math.min(30, 2 ** tentativasSessao);
+      mostrarAguardando(`Sem conexão agora. Tentando de novo em ${espera} s… (você continua conectado)`, false);
+      setTimeout(conferirSessao, espera * 1000);
+      return;
+    }
+    tentativasSessao = 0;
+    if (!data.session) mostrarLogin(); else await depoisDoLogin();
+  }
+
   async function iniciarNuvem() {
     try {
       await carregarScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js');
       sb = window.supabase.createClient(SB.url, SB.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
-      const { data } = await sb.auth.getSession();
-      if (!data.session) mostrarLogin(); else await depoisDoLogin();
+      await conferirSessao();
+      // se o login vencer de verdade (ex.: saiu em outro aparelho), volta para a tela de código
+      sb.auth.onAuthStateChange((evento, sessao) => { if (evento === 'SIGNED_OUT' || (!sessao && evento !== 'INITIAL_SESSION')) mostrarLogin(); });
     } catch (err) {
       mostrarLogin();
       $('#entrarMsg').textContent = err.message;
