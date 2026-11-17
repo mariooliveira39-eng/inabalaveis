@@ -24,7 +24,7 @@
   let vistos = null;                 // ids de vendas já exibidas (para destacar as novas)
   let novas = new Set();
   let ultimoEnvio = null;            // { texto, messageId } para o teste de duplicidade
-  let botoesChat = ['minhas vendas', 'produtos', 'fechamento'];
+  let botoesChat = ['minhas vendas', 'produtos', 'ajuda'];
   let mapa = null;
   let marcadores = {};
   let chatCount = -1;
@@ -134,11 +134,17 @@
       </div>`).join('');
   }
 
-  function chipFechamento(f) {
-    if (f.status === 'confirmado') return `<span class="chip ok">Respondido · ${hora(f.enviadoEm)}</span>`;
-    if (f.status === 'em andamento') return '<span class="chip warn">Fechamento em andamento</span>';
-    if (f.lembreteEm) return `<span class="chip bad">Pendente · lembrete ${hora(f.lembreteEm)}</span>`;
-    return '<span class="chip">Fechamento pendente</span>';
+  // Não existe fechamento: o que importa é se o colportor já relatou vendas hoje (lembrete às 20h).
+  const lembreteDe = (c) => c.lembreteEm ?? c.fechamento?.lembreteEm ?? null;
+  function relatos() {
+    const total = S.colportores.length;
+    const relataram = S.colportores.filter((c) => c.hoje.vendas > 0).length;
+    return { total, relataram, semRelato: total - relataram };
+  }
+  function chipRelato(c) {
+    if (c.hoje.vendas > 0) return `<span class="chip ok">Relatou ${c.hoje.vendas} venda(s) hoje</span>`;
+    if (lembreteDe(c)) return `<span class="chip bad">Sem relato · lembrete ${hora(lembreteDe(c))}</span>`;
+    return '<span class="chip">Ainda sem vendas hoje · lembrete às 20h</span>';
   }
 
   function renderColportor() {
@@ -169,7 +175,7 @@
       ['Média da equipe hoje', brl0(S.kpis.valorHoje / Math.max(1, S.colportores.length)), ''],
     ]);
     renderMetaPessoal(c);
-    $('#fechColportor').outerHTML = `<span id="fechColportor">${chipFechamento(c.fechamento)}</span>`;
+    $('#fechColportor').outerHTML = `<span id="fechColportor">${chipRelato(c)}</span>`;
 
     const vendas = S.vendasHoje.filter((v) => v.colportorId === c.id);
     $('#listaVendasColportor').innerHTML = vendas.length ? vendas.map((v) => `
@@ -258,33 +264,27 @@
   const formatarWa = (t) => esc(t).replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
 
   function renderGestao() {
-    const f = S.fechamento;
+    const f = relatos();
     kpis($('#kpisGestao'), [
       ['Vendido hoje (colportor)', brl(S.kpis.valorHoje), `público ${brl(S.kpis.valorHojePublico)} · ${S.kpis.vendasHoje} vendas`],
-      ['Colportores ativos', `${S.kpis.ativosHoje}/${S.colportores.length}`, 'com venda hoje'],
-      ['Fechamentos', `${f.confirmados}/${f.total}`, `${f.pendentes} pendentes · ${f.emAndamento} em andamento`],
+      ['Relataram hoje', `${f.relataram}/${f.total}`, `${f.semRelato} ainda sem vendas`],
       ['Meta da campanha', pct(S.meta.pct), `projeção ${pct(S.meta.projecaoPct)}`],
     ]);
-    $('#resumoFech').textContent = `${f.confirmados} responderam · ${f.pendentes + f.emAndamento} pendentes`;
+    $('#resumoFech').textContent = `${f.relataram} relataram · ${f.semRelato} sem relato`;
 
-    const ordem = { pendente: 0, 'em andamento': 1, confirmado: 2 };
-    const linhas = [...S.colportores].sort((a, b) => ordem[a.fechamento.status] - ordem[b.fechamento.status] || a.nome.localeCompare(b.nome));
+    const ultimaVenda = (id) => S.vendasHoje.filter((v) => v.colportorId === id && !v.desfeita).map((v) => v.criadaEm).sort().at(-1);
+    const linhas = [...S.colportores].sort((a, b) => (a.hoje.vendas > 0) - (b.hoje.vendas > 0) || a.nome.localeCompare(b.nome));
     $('#tabFech').innerHTML = `
-      <thead><tr><th>Colportor</th><th>Situação</th><th>Enviado às</th><th>Vendas do dia</th><th>Horas</th><th>Estoque</th><th>Observações</th><th>Lembrete</th></tr></thead>
-      <tbody>${linhas.length ? '' : '<tr><td colspan="8" class="vazio">Nenhum colportor cadastrado ainda.</td></tr>'}${linhas.map((c) => {
-        const fe = c.fechamento;
-        const st = fe.status === 'confirmado' ? '<span class="chip ok">Respondeu</span>'
-          : fe.status === 'em andamento' ? '<span class="chip warn">Em andamento</span>'
-            : '<span class="chip bad">Pendente</span>';
+      <thead><tr><th>Colportor</th><th>Situação</th><th>Vendas do dia</th><th>Última venda</th><th>Lembrete 20h</th></tr></thead>
+      <tbody>${linhas.length ? '' : '<tr><td colspan="5" class="vazio">Nenhum colportor cadastrado ainda.</td></tr>'}${linhas.map((c) => {
+        const ult = ultimaVenda(c.id);
+        const st = c.hoje.vendas > 0 ? '<span class="chip ok">Relatou</span>' : '<span class="chip bad">Sem relato</span>';
         return `<tr>
           <td><b>${esc(c.nome)}</b><br><span class="dica">${esc(c.regiao)}</span></td>
           <td>${st}</td>
-          <td class="num">${fe.enviadoEm ? hora(fe.enviadoEm) : '—'}</td>
           <td class="num">${brl(c.hoje.valor)}<br><span class="dica">público ${brl(c.hoje.valorPublico)} · ${c.hoje.vendas} vendas</span></td>
-          <td class="num">${fe.horas != null ? String(fe.horas).replace('.', ',') + 'h' : '—'}</td>
-          <td>${esc(fe.estoque) || '—'}</td>
-          <td>${esc(fe.obs) || '—'}</td>
-          <td class="num">${fe.lembreteEm ? hora(fe.lembreteEm) : '—'}</td>
+          <td class="num">${ult ? hora(ult) : '—'}</td>
+          <td class="num">${lembreteDe(c) ? hora(lembreteDe(c)) : '—'}</td>
         </tr>`;
       }).join('')}</tbody>`;
 
@@ -513,7 +513,7 @@
     store.set('colportor', colportorId);
     editandoMeta = false;
     $('#formMeta').dataset.para = '';
-    botoesChat = ['minhas vendas', 'produtos', 'fechamento'];
+    botoesChat = ['minhas vendas', 'produtos', 'ajuda'];
     ultimoEnvio = null;
     $('#btnReenviar').disabled = true;
     render();
@@ -583,7 +583,7 @@
       ultimoEnvio = { texto, messageId };
       $('#btnReenviar').disabled = false;
       const ult = [...(r.respostas || [])].reverse().find((x) => x.botoes);
-      botoesChat = ult ? ult.botoes.map((b) => b.toLowerCase()) : ['minhas vendas', 'produtos', 'fechamento'];
+      botoesChat = ult ? ult.botoes.map((b) => b.toLowerCase()) : ['minhas vendas', 'produtos', 'ajuda'];
       renderColportor();
     } catch (e) { toast(e.message); }
   }
@@ -599,7 +599,7 @@
   $('#btnLembrete').onclick = async () => {
     try {
       const r = await post('/api/lembretes');
-      toast(r.enviados.length ? `⏰ Lembrete enviado para ${r.enviados.length} colportor(es).` : 'Todos já responderam o fechamento. 🎉');
+      toast(r.enviados.length ? `⏰ Lembrete enviado para ${r.enviados.length} colportor(es).` : 'Nenhum colportor para lembrar.');
     } catch (e) { toast(e.message); }
   };
 

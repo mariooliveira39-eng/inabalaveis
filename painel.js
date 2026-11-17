@@ -125,15 +125,17 @@
       delta != null ? `<span class="${delta >= 0 ? 'sobe' : 'desce'}">${delta >= 0 ? '▲' : '▼'} ${Math.abs(Math.round(delta * 100))}% vs ontem</span>` : '',
     ].join('');
 
-    // meta da equipe (preço colportor) e fechamentos
+    // meta da equipe (preço colportor) e relatos do dia
     const m = S.meta;
     anel($('#pAnelMeta'), m.pct, 'meta');
     $('#pMetaPct').textContent = m.metaValor ? `${(m.pct * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '—';
     $('#pMetaSub').textContent = m.metaValor ? `${brl0(m.realizado)} de ${brl0(m.metaValor)} · projeção ${Math.round(m.projecaoPct * 100)}%` : 'defina as metas em Minha meta';
-    const f = S.fechamento;
-    anel($('#pAnelFech'), f.total ? f.confirmados / f.total : 0, 'fech');
-    $('#pFechTxt').textContent = `${f.confirmados}/${f.total}`;
-    $('#pFechSub').textContent = f.total ? `${f.pendentes + f.emAndamento} pendente(s) · prazo 23h59` : 'sem colportores';
+    // quem já relatou vendas hoje (não existe fechamento; lembrete às 20h)
+    const total = S.colportores.length;
+    const relataram = S.colportores.filter((c) => c.hoje.vendas > 0).length;
+    anel($('#pAnelFech'), total ? relataram / total : 0, 'fech');
+    $('#pFechTxt').textContent = `${relataram}/${total}`;
+    $('#pFechSub').textContent = total ? `${total - relataram} sem vendas ainda · lembrete às 20h` : 'sem colportores';
 
     // vendas por hora
     barras($('#pHoras'), P.porHora, {
