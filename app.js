@@ -1728,13 +1728,13 @@
     const nome = p.nome.toLowerCase();
     post('/api/simular', { colportorId: c.id, texto: `vendi ${Math.random() < 0.8 ? 1 : 2}x ${nome} ${pag}`, messageId: `apres-${Date.now()}` }).catch(() => {});
   }
-  function proximaVenda() { apresentacao = setTimeout(() => { vendaFicticia(); proximaVenda(); }, 12000); }
+  function proximaVenda() { apresentacao = setTimeout(() => { vendaFicticia(); proximaVenda(); }, 5000); }
   $('#btnApresentacao').onclick = () => {
     const b = $('#btnApresentacao');
     if (apresentacao) { clearTimeout(apresentacao); apresentacao = null; b.textContent = '▶ Modo apresentação'; toast('Modo apresentação pausado.'); return; }
     vendaFicticia(); proximaVenda();
     b.textContent = '⏸ Pausar apresentação';
-    toast('🎬 Modo apresentação: uma venda fictícia a cada 12 s.');
+    toast('🎬 Modo apresentação: uma venda fictícia a cada 5 s.');
   };
 
   async function sairDoApp() {
